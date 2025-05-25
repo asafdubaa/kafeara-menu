@@ -13,12 +13,32 @@ import { type MenuData, type Category, type MenuItem } from '@/app/lib/supabase'
 export default function AdminDashboard() {
   const router = useRouter();
   const [menuData, setMenuData] = useState<MenuData | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newItem, setNewItem] = useState({
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    name_tr: '',
+    description: '',
+    description_tr: ''
+  });
+  const [newItem, setNewItem] = useState<{
+    category_id: string;
+    name: string;
+    name_tr: string;
+    description: string;
+    description_tr: string;
+    price: string;
+    is_vegetarian: boolean;
+    is_vegan: boolean;
+    image_url: string | null;
+  }>({
     category_id: '',
     name: '',
+    name_tr: '',
     description: '',
+    description_tr: '',
     price: '',
+    is_vegetarian: false,
+    is_vegan: false,
+    image_url: null
   });
 
   useEffect(() => {
@@ -54,9 +74,34 @@ export default function AdminDashboard() {
     router.push('/admin/login');
   };
 
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
+    
+    setNewCategory(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
+    
+    setNewItem(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
   const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) {
-      toast.error('Category name is required');
+    if (!newCategory.name.trim()) {
+      toast.error('Category name (English) is required');
+      return;
+    }
+
+    if (!newCategory.name_tr.trim()) {
+      toast.error('Category name (Turkish) is required');
       return;
     }
 
@@ -70,7 +115,10 @@ export default function AdminDashboard() {
         ...(menuData.categories || []), // Ensure categories is an array
         {
           id: newCategoryId,
-          name: newCategoryName,
+          name: newCategory.name.trim(),
+          name_tr: newCategory.name_tr.trim(),
+          description: newCategory.description.trim() || null,
+          description_tr: newCategory.description_tr.trim() || null,
           items: [],
         },
       ],
@@ -89,7 +137,12 @@ export default function AdminDashboard() {
 
       const result = await response.json(); // Read the response to avoid body stream errors
       setMenuData(updatedData);
-      setNewCategoryName('');
+      setNewCategory({
+        name: '',
+        name_tr: '',
+        description: '',
+        description_tr: ''
+      });
       toast.success('Category added successfully');
     } catch (error) {
       console.error('Error adding category:', error);
@@ -98,8 +151,8 @@ export default function AdminDashboard() {
   };
 
   const handleAddItem = async () => {
-    if (!newItem.category_id || !newItem.name || !newItem.price) {
-      toast.error('All fields are required');
+    if (!newItem.category_id || !newItem.name.trim() || !newItem.name_tr.trim() || !newItem.price) {
+      toast.error('Please fill in all required fields (including both English and Turkish names)');
       return;
     }
 
@@ -112,18 +165,23 @@ export default function AdminDashboard() {
       return;
     }
 
-    const item: MenuItem = {
-      id: Date.now().toString(), // Simple ID generation
-      name: newItem.name,
-      description: newItem.description || null,
+    const newItemData: MenuItem = {
+      id: Date.now().toString(),
+      category_id: newItem.category_id,
+      name: newItem.name.trim(),
+      name_tr: newItem.name_tr.trim(),
+      description: newItem.description.trim() || null,
+      description_tr: newItem.description_tr.trim() || null,
       price: parseFloat(newItem.price),
-      image_url: null, // Add image URL if you have it
+      image_url: null,
+      is_vegetarian: newItem.is_vegetarian || false,
+      is_vegan: newItem.is_vegan || false,
     };
 
     const updatedCategories = [...(menuData.categories || [])];
     updatedCategories[categoryIndex] = {
       ...updatedCategories[categoryIndex],
-      items: [...updatedCategories[categoryIndex].items, item],
+      items: [...updatedCategories[categoryIndex].items, newItemData],
     };
 
     const updatedData: MenuData = { categories: updatedCategories };
@@ -144,14 +202,35 @@ export default function AdminDashboard() {
       setNewItem({
         category_id: '',
         name: '',
+        name_tr: '',
         description: '',
+        description_tr: '',
         price: '',
+        is_vegetarian: false,
+        is_vegan: false,
+        image_url: null
       });
       toast.success('Item added successfully');
     } catch (error) {
       console.error('Error adding item:', error);
       toast.error('Failed to add item');
     }
+  };
+
+  const handleEditItem = (item: MenuItem) => {
+    setNewItem({
+      category_id: item.category_id,
+      name: item.name,
+      name_tr: item.name_tr,
+      description: item.description || '',
+      description_tr: item.description_tr || '',
+      price: item.price.toString(),
+      is_vegetarian: item.is_vegetarian,
+      is_vegan: item.is_vegan,
+      image_url: item.image_url
+    });
+    // Scroll to the form
+    document.getElementById('add-item-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
@@ -181,13 +260,17 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteItem = async (categoryId: string, itemId: string) => {
+    if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+      return;
+    }
+
     if (!menuData) return;
 
-    const updatedCategories = (menuData.categories || []).map(category => {
+    const updatedCategories = menuData.categories.map((category) => {
       if (category.id === categoryId) {
         return {
           ...category,
-          items: category.items.filter(item => item.id !== itemId),
+          items: category.items.filter((item) => item.id !== itemId),
         };
       }
       return category;
@@ -204,9 +287,8 @@ export default function AdminDashboard() {
         body: JSON.stringify(updatedData),
       });
 
-      if (!response.ok) throw new Error('Failed to update menu');
+      if (!response.ok) throw new Error('Failed to delete item');
 
-      const result = await response.json(); // Read the response
       setMenuData(updatedData);
       toast.success('Item deleted successfully');
     } catch (error) {
@@ -233,13 +315,56 @@ export default function AdminDashboard() {
         <Card>
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold mb-4">Add Category</h2>
-            <div className="flex gap-4">
-              <Input
-                placeholder="Category name"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-              />
-              <Button onClick={handleAddCategory}>Add Category</Button>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div>
+                  <Label htmlFor="name">Category Name (English) *</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={newCategory.name}
+                    onChange={handleCategoryChange}
+                    placeholder="Enter category name in English"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="name_tr">Category Name (Turkish) *</Label>
+                  <Input
+                    id="name_tr"
+                    name="name_tr"
+                    value={newCategory.name_tr}
+                    onChange={handleCategoryChange}
+                    placeholder="Enter category name in Turkish"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description (English)</Label>
+                  <Input
+                    id="description"
+                    name="description"
+                    value={newCategory.description}
+                    onChange={handleCategoryChange}
+                    placeholder="Enter description in English"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description_tr">Description (Turkish)</Label>
+                  <Input
+                    id="description_tr"
+                    name="description_tr"
+                    value={newCategory.description_tr}
+                    onChange={handleCategoryChange}
+                    placeholder="Enter description in Turkish"
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleAddCategory} 
+                className="w-full"
+                disabled={!newCategory.name.trim() || !newCategory.name_tr.trim()}
+              >
+                Add Category
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -267,7 +392,7 @@ export default function AdminDashboard() {
                 </select>
               </div>
               <div>
-                <Label>Name</Label>
+                <Label>Name (English)</Label>
                 <Input
                   value={newItem.name}
                   onChange={(e) =>
@@ -276,25 +401,79 @@ export default function AdminDashboard() {
                 />
               </div>
               <div>
-                <Label>Description</Label>
+                <Label>Name (Turkish)</Label>
                 <Input
-                  value={newItem.description || ''}
+                  value={newItem.name_tr}
                   onChange={(e) =>
-                    setNewItem((prev) => ({ ...prev, description: e.target.value }))
+                    setNewItem((prev) => ({ ...prev, name_tr: e.target.value }))
                   }
                 />
               </div>
               <div>
-                <Label>Price</Label>
+                <Label>Description (English)</Label>
                 <Input
-                  type="number"
-                  value={newItem.price}
-                  onChange={(e) =>
-                    setNewItem((prev) => ({ ...prev, price: e.target.value }))
-                  }
+                  value={newItem.description}
+                  name="description"
+                  onChange={handleItemChange}
+                  placeholder="Enter description in English"
                 />
               </div>
-              <Button onClick={handleAddItem}>Add Item</Button>
+              <div>
+                <Label>Description (Turkish)</Label>
+                <Input
+                  value={newItem.description_tr}
+                  name="description_tr"
+                  onChange={handleItemChange}
+                  placeholder="Enter description in Turkish"
+                />
+              </div>
+              <div>
+                <Label>Price *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="price"
+                  value={newItem.price}
+                  onChange={handleItemChange}
+                  placeholder="Enter price"
+                />
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_vegetarian"
+                    name="is_vegetarian"
+                    checked={newItem.is_vegetarian}
+                    onChange={handleItemChange}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <Label htmlFor="is_vegetarian" className="text-sm font-medium text-gray-700">
+                    Vegetarian
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_vegan"
+                    name="is_vegan"
+                    checked={newItem.is_vegan}
+                    onChange={handleItemChange}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <Label htmlFor="is_vegan" className="text-sm font-medium text-gray-700">
+                    Vegan
+                  </Label>
+                </div>
+              </div>
+              <Button 
+                onClick={handleAddItem} 
+                className="w-full"
+                disabled={!newItem.category_id || !newItem.name.trim() || !newItem.name_tr.trim() || !newItem.price}
+              >
+                Add Item
+              </Button>
             </div>
           </CardContent>
         </Card>
