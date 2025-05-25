@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kafe Ara Menu
 
-## Getting Started
+This is a Next.js application for displaying a menu and managing it via an admin interface.
 
-First, run the development server:
+## Features
+
+*   Bilingual menu (English and Turkish)
+*   Admin panel for adding, editing, and deleting menu items
+*   Menu data stored in a local JSON file (for this setup)
+*   Responsive design
+
+## Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <your-github-repo-url>
+    cd kafearamenu
+    ```
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+## Running Locally
+
+To run the application locally with the admin panel and persistent data changes, you need to start the Next.js development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This will start the server at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+*   **Main Menu:** Access the public menu at `http://localhost:3000`
+*   **Admin Login:** Access the admin login page at `http://localhost:3000/admin`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Admin Panel
 
-## Learn More
+*   **Login Page:** `/admin`
+*   **Default Credentials:**
+    *   Username: `admin`
+    *   Password: `admin123`
 
-To learn more about Next.js, take a look at the following resources:
+Once logged in, you can manage the menu categories and items. Changes made here will update the `data/menu-data.json` file in your project directory (when running locally or on a Node.js-compatible server like Vercel).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This project is configured to be easily deployed to platforms like Vercel, which support Next.js applications with API routes.
 
-## Deploy on Vercel
+1.  Commit your changes to your GitHub repository.
+2.  Link your GitHub repository to Vercel.
+3.  Vercel will automatically detect it's a Next.js project and deploy it.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Important:** Static hosting providers (like some free cPanel hosting) typically *do not* support the API routes needed for the admin panel's persistence. You need a hosting provider that supports Node.js/Next.js servers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+*   `app/`: Contains your Next.js pages and API routes.
+    *   `admin/`: Admin pages.\n    *   `api/`: API routes (e.g., `api/menu/route.ts`).
+*   `components/`: Reusable React components.
+*   `data/`: Contains your `menu-data.json` file.
+*   `public/`: Static assets like images.
+*   `styles/`: Global styles.
+*   `lib/`: Utility functions.
+
+## Contributing
+
+Feel free to fork the repository and contribute!
