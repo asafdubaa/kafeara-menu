@@ -7,36 +7,40 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import Cookies from "js-cookie";
 
 export default function AdminLogin() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setLoading(true);
 
     try {
-      // In a real application, you would validate against a secure backend
-      // For now, we'll use a simple hardcoded check (you should change these credentials)
-      if (username === "admin" && password === "admin123") {
-        // Set a secure cookie
-        Cookies.set("adminToken", "dummy-token", {
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          expires: 1, // 1 day
-        });
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(data.message);
+        // Redirect after successful login (cookie is set by the API route)
         router.push("/admin/dashboard");
       } else {
-        toast.error("Invalid credentials");
+        toast.error(data.message || 'Login failed');
       }
     } catch (error) {
-      toast.error("An error occurred during login");
+      console.error('Login error:', error);
+      toast.error('An error occurred during login.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -78,9 +82,9 @@ export default function AdminLogin() {
             <Button
               type="submit"
               className="w-full bg-amber-950 text-[#f5e8c9] hover:bg-amber-900"
-              disabled={isLoading}
+              disabled={loading}
             >
-              {isLoading ? "Logging in..." : "Login"}
+              {loading ? "Logging in..." : "Login"}
             </Button>
           </form>
         </CardContent>
