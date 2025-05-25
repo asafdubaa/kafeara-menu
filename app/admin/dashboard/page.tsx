@@ -1,411 +1,349 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import Cookies from "js-cookie";
-import { ChevronDown, ChevronUp, Plus, Trash2, Edit2, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-interface MenuItem {
-  name_en: string;
-  description_en: string;
-  ingredients_en: string;
-  name_tr: string;
-  description_tr: string;
-  ingredients_tr: string;
-  price: string;
-}
-
-type Category = "salads" | "snacks" | "pastas" | "mainDishes" | "desserts" | "coldBeverages" | "coffee" | "tea";
-
-interface MenuData {
-  salads: MenuItem[];
-  snacks: MenuItem[];
-  pastas: MenuItem[];
-  mainDishes: MenuItem[];
-  desserts: MenuItem[];
-  coldBeverages: MenuItem[];
-  coffee: MenuItem[];
-  tea: MenuItem[];
-}
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import Cookies from 'js-cookie';
+import { type MenuData, type Category, type MenuItem } from '@/app/lib/supabase';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [menuData, setMenuData] = useState<MenuData | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Record<Category, boolean>>({
-    salads: true,
-    snacks: true,
-    pastas: true,
-    mainDishes: true,
-    desserts: true,
-    coldBeverages: true,
-    coffee: true,
-    tea: true,
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newItem, setNewItem] = useState({
+    category_id: '',
+    name: '',
+    description: '',
+    price: '',
   });
-  const [editingItem, setEditingItem] = useState<{ category: Category; index: number } | null>(null);
-  const [newItem, setNewItem] = useState<MenuItem>({
-    name_en: "",
-    description_en: "",
-    ingredients_en: "",
-    name_tr: "",
-    description_tr: "",
-    ingredients_tr: "",
-    price: "",
-  });
-  const [selectedCategory, setSelectedCategory] = useState<Category>("salads");
 
   useEffect(() => {
-    const token = Cookies.get("adminToken");
+    const token = Cookies.get('admin-token');
     if (!token) {
-      router.push("/admin");
+      router.push('/admin/login');
       return;
     }
 
     const fetchMenuData = async () => {
       try {
         const response = await fetch('/api/menu');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        // Assuming the API returns data in the MenuData structure { categories: [] }
+        if (data && data.categories) {
+          setMenuData(data);
+        } else {
+           // Handle unexpected data structure
+           console.error('Unexpected data structure from API:', data);
+           toast.error('Failed to fetch menu data: Unexpected format');
         }
-        const data: MenuData = await response.json();
-        setMenuData(data);
       } catch (error) {
         console.error('Error fetching menu data:', error);
-        toast.error('Failed to load menu data.');
+        toast.error('Failed to fetch menu data');
       }
     };
 
     fetchMenuData();
   }, [router]);
 
-  const updateMenuData = async (newData: MenuData) => {
+  const handleLogout = () => {
+    Cookies.remove('admin-token');
+    router.push('/admin/login');
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+
+    if (!menuData) return;
+
+    // Generate a simple ID for the new category (you might use UUIDs in production)
+    const newCategoryId = Date.now().toString();
+
+    const updatedData: MenuData = {
+      categories: [ 
+        ...(menuData.categories || []), // Ensure categories is an array
+        {
+          id: newCategoryId,
+          name: newCategoryName,
+          items: [],
+        },
+      ],
+    };
+
     try {
       const response = await fetch('/api/menu', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newData),
+        body: JSON.stringify(updatedData),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error('Failed to update menu');
 
-      // Assuming the update was successful, update the state
-      setMenuData(newData);
-      toast.success('Menu data updated successfully.');
+      const result = await response.json(); // Read the response to avoid body stream errors
+      setMenuData(updatedData);
+      setNewCategoryName('');
+      toast.success('Category added successfully');
     } catch (error) {
-      console.error('Error updating menu data:', error);
-      toast.error('Failed to update menu data.');
+      console.error('Error adding category:', error);
+      toast.error('Failed to add category');
     }
   };
 
-  const handleAddItem = () => {
-    if (!menuData) return;
-    if (!newItem.name_en || !newItem.price) {
-      toast.error("Name (English) and price are required");
+  const handleAddItem = async () => {
+    if (!newItem.category_id || !newItem.name || !newItem.price) {
+      toast.error('All fields are required');
       return;
     }
 
-    const updatedMenu = { ...menuData };
-    updatedMenu[selectedCategory] = [...updatedMenu[selectedCategory], newItem];
-    updateMenuData(updatedMenu);
-
-    setNewItem({
-      name_en: "",
-      description_en: "",
-      ingredients_en: "",
-      name_tr: "",
-      description_tr: "",
-      ingredients_tr: "",
-      price: "",
-    });
-  };
-
-  const handleEditItem = (category: Category, index: number) => {
     if (!menuData) return;
-    setEditingItem({ category, index });
-    setNewItem(menuData[category][index]);
-  };
 
-  const handleSaveEdit = () => {
-    if (!editingItem || !menuData) return;
-    if (!newItem.name_en || !newItem.price) {
-      toast.error("Name (English) and price are required");
+    const categoryIndex = menuData.categories.findIndex(cat => cat.id === newItem.category_id);
+
+    if (categoryIndex === -1) {
+      toast.error('Invalid category selected');
       return;
     }
 
-    const updatedMenu = { ...menuData };
-    updatedMenu[editingItem.category][editingItem.index] = newItem;
-    updateMenuData(updatedMenu);
+    const item: MenuItem = {
+      id: Date.now().toString(), // Simple ID generation
+      name: newItem.name,
+      description: newItem.description || null,
+      price: parseFloat(newItem.price),
+      image_url: null, // Add image URL if you have it
+    };
 
-    setEditingItem(null);
-    setNewItem({
-      name_en: "",
-      description_en: "",
-      ingredients_en: "",
-      name_tr: "",
-      description_tr: "",
-      ingredients_tr: "",
-      price: "",
-    });
+    const updatedCategories = [...(menuData.categories || [])];
+    updatedCategories[categoryIndex] = {
+      ...updatedCategories[categoryIndex],
+      items: [...updatedCategories[categoryIndex].items, item],
+    };
+
+    const updatedData: MenuData = { categories: updatedCategories };
+
+    try {
+      const response = await fetch('/api/menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) throw new Error('Failed to update menu');
+
+      const result = await response.json(); // Read the response
+      setMenuData(updatedData);
+      setNewItem({
+        category_id: '',
+        name: '',
+        description: '',
+        price: '',
+      });
+      toast.success('Item added successfully');
+    } catch (error) {
+      console.error('Error adding item:', error);
+      toast.error('Failed to add item');
+    }
   };
 
-  const handleDeleteItem = (category: Category, index: number) => {
+  const handleDeleteCategory = async (categoryId: string) => {
     if (!menuData) return;
-    const updatedMenu = { ...menuData };
-    updatedMenu[category] = updatedMenu[category].filter((_, i) => i !== index);
-    updateMenuData(updatedMenu);
+
+    const updatedCategories = (menuData.categories || []).filter(cat => cat.id !== categoryId);
+    const updatedData: MenuData = { categories: updatedCategories };
+
+    try {
+      const response = await fetch('/api/menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) throw new Error('Failed to update menu');
+
+      const result = await response.json(); // Read the response
+      setMenuData(updatedData);
+      toast.success('Category deleted successfully');
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast.error('Failed to delete category');
+    }
   };
 
-  const handleLogout = () => {
-    Cookies.remove("adminToken");
-    router.push("/admin");
-  };
+  const handleDeleteItem = async (categoryId: string, itemId: string) => {
+    if (!menuData) return;
 
-  const toggleCategory = (category: Category) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [category]: !prev[category],
-    }));
+    const updatedCategories = (menuData.categories || []).map(category => {
+      if (category.id === categoryId) {
+        return {
+          ...category,
+          items: category.items.filter(item => item.id !== itemId),
+        };
+      }
+      return category;
+    });
+
+    const updatedData: MenuData = { categories: updatedCategories };
+
+    try {
+      const response = await fetch('/api/menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) throw new Error('Failed to update menu');
+
+      const result = await response.json(); // Read the response
+      setMenuData(updatedData);
+      toast.success('Item deleted successfully');
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast.error('Failed to delete item');
+    }
   };
 
   if (!menuData) {
-    return (
-      <div className="min-h-screen bg-[#f5e8c9] p-8 flex justify-center items-center">
-        <p className="text-amber-950">Loading menu data...</p>
-      </div>
-    );
+    return <div>Loading...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#f5e8c9] p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-serif text-amber-950">Menu Management</h1>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="border-amber-950 text-amber-950 hover:bg-amber-950/10"
-          >
-            Logout
-          </Button>
-        </div>
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+        <Button variant="outline" onClick={handleLogout}>
+          Logout
+        </Button>
+      </div>
 
-        {/* Add/Edit Item Form */}
-        <Card className="border-4 border-double border-amber-950/40 bg-[#f5e8c9] shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-serif text-amber-950">
-              {editingItem ? "Edit Menu Item" : "Add Menu Item"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-amber-950">Category</Label>
-                  <select
-                    className="w-full p-2 border border-amber-950/40 rounded-md bg-[#f5e8c9] text-amber-950"
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value as Category)}
-                    disabled={!!editingItem}
-                  >
-                    <option value="salads">Salads</option>
-                    <option value="snacks">Snacks</option>
-                    <option value="pastas">Pastas</option>
-                    <option value="mainDishes">Main Dishes</option>
-                    <option value="desserts">Desserts</option>
-                    <option value="coldBeverages">Cold Beverages</option>
-                    <option value="coffee">Coffee</option>
-                    <option value="tea">Tea</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-amber-950">Name (English)</Label>
-                  <Input
-                    value={newItem.name_en}
-                    onChange={(e) => setNewItem({ ...newItem, name_en: e.target.value })}
-                    placeholder="Item name in English"
-                    className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <Label className="text-amber-950">Description (English)</Label>
-                    <Input
-                      value={newItem.description_en}
-                      onChange={(e) => setNewItem({ ...newItem, description_en: e.target.value })}
-                      placeholder="Item description in English"
-                      className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                    />
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-amber-950">Ingredients (English)</Label>
-                    <Input
-                      value={newItem.ingredients_en}
-                      onChange={(e) => setNewItem({ ...newItem, ingredients_en: e.target.value })}
-                      placeholder="Item ingredients in English"
-                      className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                    />
-                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <Label className="text-amber-950">Name (Turkish)</Label>
-                    <Input
-                      value={newItem.name_tr}
-                      onChange={(e) => setNewItem({ ...newItem, name_tr: e.target.value })}
-                      placeholder="Item name in Turkish"
-                      className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                    />
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-amber-950">Description (Turkish)</Label>
-                    <Input
-                      value={newItem.description_tr}
-                      onChange={(e) => setNewItem({ ...newItem, description_tr: e.target.value })}
-                      placeholder="Item description in Turkish"
-                      className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                    />
-                 </div>
-              </div>
-               <div className="space-y-2">
-                  <Label className="text-amber-950">Ingredients (Turkish)</Label>
-                  <Input
-                    value={newItem.ingredients_tr}
-                    onChange={(e) => setNewItem({ ...newItem, ingredients_tr: e.target.value })}
-                    placeholder="Item ingredients in Turkish"
-                    className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                  />
-               </div>
-              <div className="space-y-2">
-                <Label className="text-amber-950">Price</Label>
-                <Input
-                  value={newItem.price}
-                  onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                  placeholder="Item price (e.g., 85 TL)"
-                  className="border-amber-950/40 bg-[#f5e8c9] text-amber-950"
-                />
-              </div>
-              <div className="flex gap-2">
-                {editingItem ? (
-                  <>
-                    <Button
-                      onClick={handleSaveEdit}
-                      className="bg-amber-950 text-[#f5e8c9] hover:bg-amber-900"
-                    >
-                      Save Changes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEditingItem(null);
-                        setNewItem({
-                          name_en: "",
-                          description_en: "",
-                          ingredients_en: "",
-                          name_tr: "",
-                          description_tr: "",
-                          ingredients_tr: "",
-                          price: "",
-                        });
-                      }}
-                      className="border-amber-950 text-amber-950 hover:bg-amber-950/10"
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    onClick={handleAddItem}
-                    className="bg-amber-950 text-[#f5e8c9] hover:bg-amber-900"
-                  >
-                    Add Item
-                  </Button>
-                )}
-              </div>
+      <div className="grid gap-8">
+        {/* Add Category Section */}
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Add Category</h2>
+            <div className="flex gap-4">
+              <Input
+                placeholder="Category name"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+              <Button onClick={handleAddCategory}>Add Category</Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Menu Categories */}
-        <div className="space-y-6">
-          {(Object.entries(menuData) as [Category, MenuItem[]][]).map(([category, items]) => (
-            <Card key={category} className="border-4 border-double border-amber-950/40 bg-[#f5e8c9] shadow-lg">
-              <CardHeader>
-                <button
-                  onClick={() => toggleCategory(category)}
-                  className="w-full flex justify-between items-center"
+        {/* Add Item Section */}
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Add Item</h2>
+            <div className="grid gap-4">
+              <div>
+                <Label>Category</Label>
+                <select
+                  className="w-full p-2 border rounded"
+                  value={newItem.category_id}
+                  onChange={(e) =>
+                    setNewItem((prev) => ({ ...prev, category_id: e.target.value }))
+                  }
                 >
-                  <CardTitle className="text-2xl font-serif text-amber-950">
-                    {category.charAt(0).toUpperCase() + category.slice(1)}
-                  </CardTitle>
-                  {expandedCategories[category] ? (
-                    <ChevronUp className="h-5 w-5 text-amber-950" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-amber-950" />
-                  )}
-                </button>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={cn(
-                    "grid gap-4 transition-all duration-300 ease-in-out overflow-hidden",
-                    expandedCategories[category] ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                  )}
-                >
-                  <div className="min-h-0">
-                    {Array.isArray(items) && items.length > 0 ? (
-                      items.map((item: MenuItem, index: number) => (
-                        <div key={index} className="mb-6 last:mb-0 p-4 border border-amber-950/30 rounded-lg">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-grow">
-                              <div className="flex justify-between items-baseline">
-                                <h3 className="text-xl font-medium text-amber-950">{item.name_en} / {item.name_tr}</h3>
-                                <span className="text-xl font-medium text-amber-950">{item.price}</span>
-                              </div>
-                              {item.description_en && <p className="text-amber-950/80 italic">EN: {item.description_en}</p>}
-                               {item.description_tr && <p className="text-amber-950/80 italic">TR: {item.description_tr}</p>}
-                              {item.ingredients_en && <p className="text-sm text-amber-950/70">EN: {item.ingredients_en}</p>}
-                              {item.ingredients_tr && <p className="text-sm text-amber-950/70">TR: {item.ingredients_tr}</p>}
-                            </div>
-                            <div className="flex gap-2 ml-4">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEditItem(category, index)}
-                                className="border-amber-950 text-amber-950 hover:bg-amber-950/10"
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteItem(category, index)}
-                                className="border-amber-950 text-amber-950 hover:bg-amber-950/10"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
+                  <option value="">Select a category</option>
+                  {(menuData.categories || []).map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={newItem.name}
+                  onChange={(e) =>
+                    setNewItem((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Input
+                  value={newItem.description || ''}
+                  onChange={(e) =>
+                    setNewItem((prev) => ({ ...prev, description: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Price</Label>
+                <Input
+                  type="number"
+                  value={newItem.price}
+                  onChange={(e) =>
+                    setNewItem((prev) => ({ ...prev, price: e.target.value }))
+                  }
+                />
+              </div>
+              <Button onClick={handleAddItem}>Add Item</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Menu Preview Section */}
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Menu Preview</h2>
+            <div className="grid gap-4">
+              {(menuData.categories || []).map((category) => (
+                <div key={category.id} className="border rounded p-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">{category.name}</h3>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteCategory(category.id)}
+                    >
+                      Delete Category
+                    </Button>
+                  </div>
+                  <div className="grid gap-2">
+                    {(category.items || []).map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex justify-between items-center p-2 bg-accent/50 rounded"
+                      >
+                        <div>
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {item.description}
+                          </p>
+                          <p className="text-sm">${item.price}</p>
                         </div>
-                      ))
-                    ) : ( expandedCategories[category] && (
-                      <p className="text-amber-950/60 text-center py-4">No items in this category</p>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteItem(category.id, item.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
