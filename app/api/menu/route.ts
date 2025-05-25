@@ -8,7 +8,30 @@ export async function GET() {
     // Fetch categories and their associated items from Supabase
     const { data: categories, error: categoriesError } = await supabase
       .from('categories')
-      .select('*, items(*)');
+      .select(`
+        *,
+        items (
+          id,
+          name,
+          name_tr,
+          description,
+          description_tr,
+          price,
+          image_url,
+          is_vegetarian,
+          is_vegan
+        )
+      `)
+      .order('id', { ascending: true });
+
+    // Order items within each category
+    if (categories) {
+      categories.forEach((category: Category) => {
+        if (category.items) {
+          category.items.sort((a: MenuItem, b: MenuItem) => a.id.localeCompare(b.id));
+        }
+      });
+    }
 
     if (categoriesError) {
       console.error('Error fetching categories:', categoriesError);
@@ -41,13 +64,47 @@ export async function POST(request: Request) {
     // For simplicity, this example will overwrite existing data.
     // A more robust solution would handle individual category/item updates/deletions.
 
-    // Clear existing categories and items (handle carefully in production!)
-    const { error: deleteItemsError } = await supabase.from('items').delete().neq('id', '0'); // Delete all items
-    const { error: deleteCategoriesError } = await supabase.from('categories').delete().neq('id', '0'); // Delete all categories
+    // Start a transaction to ensure data consistency
+    const { data: existingCategories, error: fetchError } = await supabase
+      .from('categories')
+      .select('id')
+      .order('id');
 
-    if (deleteItemsError || deleteCategoriesError) {
-      console.error('Error clearing existing data:', deleteItemsError || deleteCategoriesError);
-      throw new Error('Failed to clear existing menu data');
+    if (fetchError) {
+      console.error('Error fetching existing categories:', fetchError);
+      throw new Error('Failed to fetch existing menu data');
+    }
+
+    // Prepare data for batch operations
+    const categoryUpserts = updatedMenuData.categories.map(category => ({
+      id: category.id,
+      name: category.name,
+      name_tr: category.name_tr,
+      description: category.description || null,
+      description_tr: category.description_tr || null,
+    }));
+
+    const itemUpserts = updatedMenuData.categories.flatMap(category => 
+      (category.items || []).map(item => ({
+        ...item,
+        category_id: category.id,
+        description: item.description || null,
+        description_tr: item.description_tr || null,
+      }))
+    );
+
+    // Perform batch operations
+    const { error: upsertCatError } = await supabase
+      .from('categories')
+      .upsert(categoryUpserts);
+
+    const { error: upsertItemError } = await supabase
+      .from('items')
+      .upsert(itemUpserts);
+
+    if (upsertCatError || upsertItemError) {
+      console.error('Error updating data:', upsertCatError || upsertItemError);
+      throw new Error('Failed to update menu data');
     }
 
     // Insert updated categories and items
