@@ -1,4 +1,4 @@
-import { MenuCard } from "@/components/menu-card"
+import MenuCard from "@/components/menu-card"
 
 export default function Home() {
   return (
